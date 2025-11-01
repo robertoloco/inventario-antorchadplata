@@ -4,9 +4,11 @@
 -- Tabla de productos
 CREATE TABLE IF NOT EXISTS productos (
   id BIGSERIAL PRIMARY KEY,
+  codigo TEXT,
   nombre TEXT NOT NULL,
   categoria TEXT,
   coleccion TEXT,
+  tamano TEXT,
   precio NUMERIC(10, 2) DEFAULT 0,
   stock INTEGER DEFAULT 0,
   imagen TEXT,
