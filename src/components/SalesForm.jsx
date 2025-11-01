@@ -6,9 +6,10 @@ function SalesForm() {
   const [ventas, setVentas] = useState([]);
   const [formData, setFormData] = useState({
     productoId: '',
-    cantidad: '',
+    cantidad: '1',
     precioVenta: ''
   });
+  const [busquedaProducto, setBusquedaProducto] = useState('');
 
   useEffect(() => {
     loadData();
@@ -36,7 +37,7 @@ function SalesForm() {
         parseInt(formData.cantidad),
         parseFloat(formData.precioVenta)
       );
-      setFormData({ productoId: '', cantidad: '', precioVenta: '' });
+      setFormData({ productoId: '', cantidad: '1', precioVenta: '' });
       loadData();
       alert('Venta registrada correctamente');
     } catch (error) {
@@ -48,48 +49,84 @@ function SalesForm() {
     const producto = productos.find(p => p.id === parseInt(productoId));
     setFormData({
       productoId,
-      cantidad: '',
+      cantidad: '1',
       precioVenta: producto ? producto.precio : ''
     });
+    setBusquedaProducto(''); // Limpiar búsqueda al seleccionar
   };
+
+  const productosFiltrados = productos.filter(p => {
+    if (!busquedaProducto) return true;
+    const busqueda = busquedaProducto.toLowerCase();
+    return (
+      p.nombre?.toLowerCase().includes(busqueda) ||
+      p.codigo?.toLowerCase().includes(busqueda) ||
+      p.categoria?.toLowerCase().includes(busqueda)
+    );
+  });
 
   return (
     <div className="sales-form">
       <h2>Registrar Venta</h2>
       
       <form onSubmit={handleSubmit} className="form">
-        <select
-          value={formData.productoId}
-          onChange={(e) => handleProductoChange(e.target.value)}
-          required
-        >
-          <option value="">Seleccionar producto</option>
-          {productos.map((producto) => (
-            <option key={producto.id} value={producto.id}>
-              {producto.nombre} (Stock: {producto.stock})
-            </option>
-          ))}
-        </select>
+        <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+          <label>🔍 Buscar producto</label>
+          <input
+            type="text"
+            placeholder="Buscar por nombre, código o categoría..."
+            value={busquedaProducto}
+            onChange={(e) => setBusquedaProducto(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        
+        <div className="form-field">
+          <label>Producto *</label>
+          <select
+            value={formData.productoId}
+            onChange={(e) => handleProductoChange(e.target.value)}
+            required
+          >
+            <option value="">Seleccionar producto</option>
+            {productosFiltrados.map((producto) => (
+              <option key={producto.id} value={producto.id}>
+                {producto.nombre} (Stock: {producto.stock})
+              </option>
+            ))}
+          </select>
+          {busquedaProducto && productosFiltrados.length === 0 && (
+            <p className="no-results">No se encontraron productos</p>
+          )}
+        </div>
 
-        <input
-          type="number"
-          placeholder="Cantidad"
-          value={formData.cantidad}
-          onChange={(e) => setFormData({ ...formData, cantidad: e.target.value })}
-          required
-          min="1"
-        />
+        <div className="form-field">
+          <label>Cantidad *</label>
+          <input
+            type="number"
+            placeholder="1"
+            value={formData.cantidad}
+            onChange={(e) => setFormData({ ...formData, cantidad: e.target.value })}
+            required
+            min="1"
+          />
+        </div>
 
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Precio de venta"
-          value={formData.precioVenta}
-          onChange={(e) => setFormData({ ...formData, precioVenta: e.target.value })}
-          required
-        />
+        <div className="form-field">
+          <label>Precio de venta (€) *</label>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={formData.precioVenta}
+            onChange={(e) => setFormData({ ...formData, precioVenta: e.target.value })}
+            required
+          />
+        </div>
 
-        <button type="submit" className="btn-primary">Registrar Venta</button>
+        <button type="submit" className="btn-primary btn-form-submit">
+          💸 Registrar Venta
+        </button>
       </form>
 
       <div className="ventas-list">

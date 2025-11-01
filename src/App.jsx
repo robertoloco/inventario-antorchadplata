@@ -27,7 +27,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          <img src="/logo_antorcha.png" alt="Antorcha de Plata" className="logo" />
+          <img src="/inventario-antorcahdplata/logo_antorcha.png" alt="Antorcha de Plata" className="logo" />
           <h1>Antorcha de Plata - Inventario</h1>
         </div>
         <nav className="nav">
