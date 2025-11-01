@@ -2,8 +2,8 @@ import Dexie from 'dexie';
 
 export const db = new Dexie('InventarioAntorcaDB');
 
-db.version(1).stores({
-  productos: '++id, nombre, categoria, precio, stock, createdAt',
+db.version(2).stores({
+  productos: '++id, nombre, categoria, precio, stock, imagen, createdAt',
   ventas: '++id, productoId, cantidad, precioVenta, fecha, tipo, metodoPago',
   caja: '++id, fecha, tipo, monto, descripcion, ventaId, metodoPago'
 });

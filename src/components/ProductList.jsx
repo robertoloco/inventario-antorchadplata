@@ -11,7 +11,8 @@ function ProductList() {
     nombre: '',
     categoria: '',
     precio: '',
-    stock: 0
+    stock: 0,
+    imagen: ''
   });
   const [produccionData, setProduccionData] = useState({
     productoId: null,
@@ -98,7 +99,8 @@ function ProductList() {
       nombre: producto.nombre,
       categoria: producto.categoria,
       precio: producto.precio,
-      stock: producto.stock
+      stock: producto.stock,
+      imagen: producto.imagen || ''
     });
     setShowForm(true);
   };
@@ -126,9 +128,35 @@ function ProductList() {
   };
 
   const resetForm = () => {
-    setFormData({ nombre: '', categoria: '', precio: '', stock: 0 });
+    setFormData({ nombre: '', categoria: '', precio: '', stock: 0, imagen: '' });
     setEditingId(null);
     setShowForm(false);
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('La imagen no debe superar 2MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, imagen: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleQuickStock = async (cantidad) => {
+    try {
+      await registrarProduccion(produccionData.productoId, cantidad);
+      setProduccionData({ productoId: null, cantidad: '' });
+      loadProductos();
+      alert('Producción registrada correctamente');
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
   };
 
   return (
@@ -228,6 +256,26 @@ function ProductList() {
               onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
             />
           </div>
+          <div className="form-field">
+            <label>Imagen del producto</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+            />
+            {formData.imagen && (
+              <div className="image-preview">
+                <img src={formData.imagen} alt="Preview" style={{ maxWidth: '200px', marginTop: '10px' }} />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, imagen: '' })}
+                  className="btn-delete-small"
+                >
+                  ✖ Eliminar imagen
+                </button>
+              </div>
+            )}
+          </div>
           <button type="submit" className="btn-primary btn-form-submit">
             {editingId ? '✔️ Actualizar Producto' : '➕ Crear Producto'}
           </button>
@@ -237,6 +285,11 @@ function ProductList() {
       <div className="products-grid">
         {productosFiltrados.map((producto) => (
           <div key={producto.id} className="product-card">
+            {producto.imagen && (
+              <div className="product-image">
+                <img src={producto.imagen} alt={producto.nombre} />
+              </div>
+            )}
             <div className="product-info">
               <h3>{producto.nombre}</h3>
               <p className="categoria">{producto.categoria}</p>
@@ -274,36 +327,21 @@ function ProductList() {
             <div className="produccion-quick-buttons">
               <button
                 type="button"
-                onClick={() => {
-                  setProduccionData({ ...produccionData, cantidad: '1' });
-                  setTimeout(() => {
-                    handleProduccion({ preventDefault: () => {} });
-                  }, 0);
-                }}
+                onClick={() => handleQuickStock(1)}
                 className="btn-quick"
               >
                 +1
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setProduccionData({ ...produccionData, cantidad: '5' });
-                  setTimeout(() => {
-                    handleProduccion({ preventDefault: () => {} });
-                  }, 0);
-                }}
+                onClick={() => handleQuickStock(5)}
                 className="btn-quick"
               >
                 +5
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setProduccionData({ ...produccionData, cantidad: '10' });
-                  setTimeout(() => {
-                    handleProduccion({ preventDefault: () => {} });
-                  }, 0);
-                }}
+                onClick={() => handleQuickStock(10)}
                 className="btn-quick"
               >
                 +10
