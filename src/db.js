@@ -1,5 +1,6 @@
 import Dexie from 'dexie';
-import { supabase, isSupabaseEnabled } from './supabaseClient';
+import { getFirebaseDatabase, isFirebaseConfigured } from './firebaseClient';
+import { ref, get, set, update, remove, push, query, orderByChild, startAt, endAt } from 'firebase/database';
 
 // IndexedDB local (fallback)
 export const db = new Dexie('InventarioAntorcaDB');
@@ -29,70 +30,99 @@ const toCamelCase = (obj) => {
   return result;
 };
 
-// Funciones helper para productos (híbrido Supabase + IndexedDB)
+// Helpers Firebase <-> modelo local
+const firebaseProductosPath = 'productos';
+const firebaseVentasPath = 'ventas';
+const firebaseCajaPath = 'caja';
+
+const getRTDB = () => {
+  if (!isFirebaseConfigured()) return null;
+  return getFirebaseDatabase();
+};
+
+// Funciones helper para productos (híbrido Firebase + IndexedDB)
 export const productosDB = {
   async getAll() {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const { data, error } = await supabase.from('productos').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        return data.map(toCamelCase);
+        const snapshot = await get(query(ref(rtdb, firebaseProductosPath), orderByChild('created_at')));
+        const val = snapshot.val();
+        if (val) {
+          const productos = Object.entries(val).map(([id, p]) => ({ id, ...toCamelCase(p) }));
+          // ordenamos por created_at desc
+          return productos.sort((a, b) => (b.createdAt || b.created_at || '').localeCompare(a.createdAt || a.created_at || ''));
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.productos.toArray();
   },
   
   async add(producto) {
-    if (isSupabaseEnabled()) {
+    const nowISO = new Date().toISOString();
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const productoData = { ...toSnakeCase(producto), created_at: new Date().toISOString() };
-        const { data, error } = await supabase.from('productos').insert([productoData]).select();
-        if (error) throw error;
-        return data[0].id;
+        const productosRef = ref(rtdb, firebaseProductosPath);
+        const newRef = push(productosRef);
+        const productoData = { ...toSnakeCase(producto), created_at: nowISO };
+        await set(newRef, productoData);
+        const newId = newRef.key;
+        // también guardamos en IndexedDB para modo offline
+        await db.productos.add({ ...producto, createdAt: nowISO, id: newId });
+        return newId;
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
-    return await db.productos.add({ ...producto, createdAt: new Date().toISOString() });
+    return await db.productos.add({ ...producto, createdAt: nowISO });
   },
   
   async update(id, producto) {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb && id != null) {
       try {
+        const productoRef = ref(rtdb, `${firebaseProductosPath}/${id}`);
         const productoData = { ...toSnakeCase(producto), updated_at: new Date().toISOString() };
-        const { error } = await supabase.from('productos').update(productoData).eq('id', id);
-        if (error) throw error;
+        await update(productoRef, productoData);
+        await db.productos.update(id, producto);
         return;
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.productos.update(id, producto);
   },
   
   async delete(id) {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb && id != null) {
       try {
-        const { error } = await supabase.from('productos').delete().eq('id', id);
-        if (error) throw error;
+        const productoRef = ref(rtdb, `${firebaseProductosPath}/${id}`);
+        await remove(productoRef);
+        await db.productos.delete(id);
         return;
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.productos.delete(id);
   },
   
   async getById(id) {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb && id != null) {
       try {
-        const { data, error } = await supabase.from('productos').select('*').eq('id', id).single();
-        if (error) throw error;
-        return toCamelCase(data);
+        const productoRef = ref(rtdb, `${firebaseProductosPath}/${id}`);
+        const snapshot = await get(productoRef);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          return { id, ...toCamelCase(data) };
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.productos.get(id);
@@ -107,16 +137,20 @@ export const productosDB = {
   }
 };
 
-// Funciones helper para ventas (híbrido)
+// Funciones helper para ventas (híbrido Firebase + IndexedDB)
 export const ventasDB = {
   async getAll() {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const { data, error } = await supabase.from('ventas').select('*').order('fecha', { ascending: false });
-        if (error) throw error;
-        return data.map(toCamelCase);
+        const snapshot = await get(query(ref(rtdb, firebaseVentasPath), orderByChild('fecha')));
+        const val = snapshot.val();
+        if (val) {
+          const ventas = Object.entries(val).map(([id, v]) => ({ id, ...toCamelCase(v) }));
+          return ventas.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.ventas.orderBy('fecha').reverse().toArray();
@@ -124,14 +158,18 @@ export const ventasDB = {
   
   async add(venta) {
     const fecha = new Date().toISOString();
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
+        const ventasRef = ref(rtdb, firebaseVentasPath);
+        const newRef = push(ventasRef);
         const ventaData = { ...toSnakeCase(venta), fecha };
-        const { data, error } = await supabase.from('ventas').insert([ventaData]).select();
-        if (error) throw error;
-        return data[0].id;
+        await set(newRef, ventaData);
+        const newId = newRef.key;
+        await db.ventas.add({ ...venta, fecha, id: newId });
+        return newId;
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.ventas.add({ ...venta, fecha });
@@ -143,33 +181,42 @@ export const ventasDB = {
     const endOfDay = new Date(fecha);
     endOfDay.setHours(23, 59, 59, 999);
     
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const { data, error } = await supabase
-          .from('ventas')
-          .select('*')
-          .gte('fecha', startOfDay.toISOString())
-          .lte('fecha', endOfDay.toISOString());
-        if (error) throw error;
-        return data.map(toCamelCase);
+        const q = query(
+          ref(rtdb, firebaseVentasPath),
+          orderByChild('fecha'),
+          startAt(startOfDay.toISOString()),
+          endAt(endOfDay.toISOString())
+        );
+        const snapshot = await get(q);
+        const val = snapshot.val();
+        if (val) {
+          return Object.entries(val).map(([id, v]) => ({ id, ...toCamelCase(v) }));
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.ventas.where('fecha').between(startOfDay.toISOString(), endOfDay.toISOString()).toArray();
   }
 };
 
-// Funciones helper para caja (híbrido)
+// Funciones helper para caja (híbrido Firebase + IndexedDB)
 export const cajaDB = {
   async getAll() {
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const { data, error } = await supabase.from('caja').select('*').order('fecha', { ascending: false });
-        if (error) throw error;
-        return data.map(toCamelCase);
+        const snapshot = await get(query(ref(rtdb, firebaseCajaPath), orderByChild('fecha')));
+        const val = snapshot.val();
+        if (val) {
+          const movimientos = Object.entries(val).map(([id, m]) => ({ id, ...toCamelCase(m) }));
+          return movimientos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.caja.orderBy('fecha').reverse().toArray();
@@ -177,14 +224,18 @@ export const cajaDB = {
   
   async add(movimiento) {
     const fecha = new Date().toISOString();
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
+        const cajaRef = ref(rtdb, firebaseCajaPath);
+        const newRef = push(cajaRef);
         const cajaData = { ...toSnakeCase(movimiento), fecha };
-        const { data, error } = await supabase.from('caja').insert([cajaData]).select();
-        if (error) throw error;
-        return data[0].id;
+        await set(newRef, cajaData);
+        const newId = newRef.key;
+        await db.caja.add({ ...movimiento, fecha, id: newId });
+        return newId;
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     return await db.caja.add({ ...movimiento, fecha });
@@ -204,20 +255,26 @@ export const cajaDB = {
     const endOfDay = new Date(fecha);
     endOfDay.setHours(23, 59, 59, 999);
     
-    if (isSupabaseEnabled()) {
+    const rtdb = getRTDB();
+    if (rtdb) {
       try {
-        const { data, error } = await supabase
-          .from('caja')
-          .select('*')
-          .gte('fecha', startOfDay.toISOString())
-          .lte('fecha', endOfDay.toISOString());
-        if (error) throw error;
-        return data.map(toCamelCase).reduce((total, mov) => {
-          const monto = parseFloat(mov.monto) || 0;
-          return mov.tipo === 'ingreso' ? total + monto : total - monto;
-        }, 0);
+        const q = query(
+          ref(rtdb, firebaseCajaPath),
+          orderByChild('fecha'),
+          startAt(startOfDay.toISOString()),
+          endAt(endOfDay.toISOString())
+        );
+        const snapshot = await get(q);
+        const val = snapshot.val();
+        if (val) {
+          const movimientos = Object.entries(val).map(([id, m]) => ({ id, ...toCamelCase(m) }));
+          return movimientos.reduce((total, mov) => {
+            const monto = parseFloat(mov.monto) || 0;
+            return mov.tipo === 'ingreso' ? total + monto : total - monto;
+          }, 0);
+        }
       } catch (error) {
-        console.warn('Supabase error, usando IndexedDB local:', error);
+        console.warn('Firebase error, usando IndexedDB local:', error);
       }
     }
     
